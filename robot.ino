@@ -95,6 +95,7 @@ void avoidObstacle() {
   Serial.println(" cm");
 
   // Ontwijkmanoeuvre naar links
+  Serial.println("Ontwijkmanoeuvre naar links");
   turnLeftSharp(t_p_speed);
   delay(250);
   
@@ -103,26 +104,32 @@ void avoidObstacle() {
   delay(500);
   
   // Draai
+  Serial.println("Draai naar links");
   turnLeftSharp(t_p_speed);
   delay(900);
 
   // Rij vooruit
+  Serial.println("Rij vooruit");
   driveForward(t_p_speed);
   delay(800);
 
   // Draai terug
+  Serial.println("Draai terug rechts");
   turnRightSharp(t_p_speed);
   delay(900);
 
   // Rij vooruit
+  Serial.println("Rij vooruit");
   driveForward(t_p_speed);
   delay(700);
 
   // Draai
+  Serial.println("Draai rechts");
   turnRightSharp(t_p_speed);
   delay(650);
 
   // Rij vooruit
+  Serial.println("Rij vooruit");
   driveForward(t_p_speed);
 
   // Zoek naar lijn
@@ -135,9 +142,11 @@ void avoidObstacle() {
   }
 
   // Finale positionering
+  Serial.println("Finale positionering");
   turnLeftSharp(t_p_speed);
   delay(100);
   
+  Serial.println("Rij vooruit");
   driveForward(t_p_speed);
   delay(500);
 }
@@ -205,7 +214,7 @@ void loop() {
     driveForward(vSpeed);
     delay(turn_delay);
   }
-  else if(distance < stop_distance) {
+  if(distance < stop_distance) {
     avoidObstacle();
   }
 }
