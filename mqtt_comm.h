@@ -21,14 +21,14 @@ const char* WIFI_PASSWORD = "Gu9510112!";
 // MQTT Broker settings
 const char* MQTT_BROKER = "mqtt.eclipseprojects.io";
 const int MQTT_PORT = 1883;
-const char* MQTT_CLIENT_ID = "ESP32_Car";
+const char* MQTT_CLIENT_ID = "ESP32_Autobrecht";
 
 
 // MQTT Topics
-const char* TOPIC_DISTANCES = "car/sensors/distances";
-const char* TOPIC_LINE_SENSORS = "car/sensors/line";
-const char* TOPIC_MOTOR_SPEEDS = "car/motors/speeds";
-const char* TOPIC_STATUS = "car/status";
+const char* TOPIC_DISTANCES = "autobrecht/sensors/distances";
+const char* TOPIC_LINE_SENSORS = "autobrecht/sensors/line";
+const char* TOPIC_MOTOR_SPEEDS = "autobrecht/motors/speeds";
+const char* TOPIC_STATUS = "autobrecht/status";
 
 // Global variables
 WiFiClient espClient;
@@ -100,28 +100,25 @@ bool connectMqtt() {
     return false;
 }
 
-void publishDistances(float left, float center, float right) {
+void publishDistances(float center) {
     if (!mqtt.connected()) return;
     
     char message[100];
     snprintf(message, sizeof(message), 
-             "{\"left\":%.1f,\"center\":%.1f,\"right\":%.1f}", 
-             left, center, right);
+             "{\"center\":%.1f}", 
+             center);
     mqtt.publish(TOPIC_DISTANCES, message);
-    DEBUG_PRINTF("Published distances - Left: %.1f, Center: %.1f, Right: %.1f\n", 
-                 left, center, right);
+    DEBUG_PRINTF("Published distance - Center: %.1f cm\n", center);
 }
 
-void publishLineSensors(bool left, bool center, bool right) {
+void publishLineSensors(bool left, bool right) {
     if (!mqtt.connected()) return;
     
     char message[100];
     snprintf(message, sizeof(message), 
-             "{\"left\":%d,\"center\":%d,\"right\":%d}", 
-             left, center, right);
+             "{\"left\":%d,\"right\":%d}", 
+             left, right);
     mqtt.publish(TOPIC_LINE_SENSORS, message);
-    DEBUG_PRINTF("Published line sensors - Left: %d, Center: %d, Right: %d\n", 
-                 left, center, right);
 }
 
 void publishMotorSpeeds(int left, int right) {

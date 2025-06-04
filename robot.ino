@@ -4,6 +4,8 @@
  * Nederlandse versie
  */
 
+#include "mqtt_comm.h"
+
 // ===== CONFIGURATIE VARIABELEN =====
 // Snelheidsinstellingen voor de motoren
 int vSpeed = 100;         // Normale rijsnelheid
@@ -39,6 +41,8 @@ int distance;            // Gemeten afstand in cm
 void stopMotors() {
   analogWrite(motorRspeed, 0);
   analogWrite(motorLspeed, 0);
+
+  publishMotorSpeeds(0, 0);
 }
 
 void driveForward(int speed) {
@@ -48,6 +52,8 @@ void driveForward(int speed) {
   digitalWrite(motorL2, LOW);
   analogWrite(motorRspeed, speed);
   analogWrite(motorLspeed, speed);
+
+  publishMotorSpeeds(speed, vSpeed);
 }
 
 void turnRight(int speed) {
@@ -57,6 +63,8 @@ void turnRight(int speed) {
   digitalWrite(motorL2, LOW);
   analogWrite(motorRspeed, speed);
   analogWrite(motorLspeed, turn_speed);
+
+  publishMotorSpeeds(speed, vSpeed);
 }
 
 void turnLeft(int speed) {
@@ -66,6 +74,8 @@ void turnLeft(int speed) {
   digitalWrite(motorL2, HIGH);
   analogWrite(motorRspeed, turn_speed);
   analogWrite(motorLspeed, speed);
+
+  publishMotorSpeeds(speed, vSpeed);
 }
 
 void turnRightSharp(int speed) {
@@ -75,6 +85,8 @@ void turnRightSharp(int speed) {
   digitalWrite(motorL2, HIGH);
   analogWrite(motorRspeed, speed);
   analogWrite(motorLspeed, speed);
+
+  publishMotorSpeeds(speed, vSpeed);
 }
 
 void turnLeftSharp(int speed) {
@@ -84,6 +96,8 @@ void turnLeftSharp(int speed) {
   digitalWrite(motorL2, LOW);
   analogWrite(motorRspeed, speed);
   analogWrite(motorLspeed, speed);
+
+  publishMotorSpeeds(speed, vSpeed);
 }
 
 // ===== OBSTAKELVERMIJDING FUNCTIE =====
@@ -173,12 +187,22 @@ void setup() {
   pinMode(right_sensor_pin, INPUT);
   Serial.println("Lijnsensor pinnen geïnitialiseerd");
 
+  // Initialize WiFi and MQTT
+  setupWiFi();
+  setupMqtt();
+  if (connectMqtt()) {
+    publishStatus("Robot initialized and connected to MQTT");
+  }
+
   Serial.println("Setup voltooid. Starten over 3 seconden...");
   delay(3000);                              
   Serial.println("Robot is nu actief!");
 }
 
 void loop() {
+  // Update MQTT connection
+  updateMqtt();
+
   // Lees ultrasone sensor
   digitalWrite(trigPin, LOW);
   delayMicroseconds(2);
@@ -186,10 +210,17 @@ void loop() {
   delayMicroseconds(10);
   digitalWrite(trigPin, LOW);
   duration = pulseIn(echoPin, HIGH);
-  distance = duration * 0.034 / 2;
+  if (duration == 0) {
+    distance = 999; // Timeout waarde
+  } else {
+    distance = duration * 0.034 / 2;
+  }
   Serial.print("Afstand: ");
   Serial.print(distance);
   Serial.println(" cm");
+
+  // Publish distance data
+  publishDistances(distance);  // Using same distance for left and right sensors
 
   // Lees lijnsensoren
   left_sensor_state = digitalRead(left_sensor_pin);
@@ -198,6 +229,9 @@ void loop() {
   Serial.print(left_sensor_state);
   Serial.print(" Rechts: ");
   Serial.println(right_sensor_state);
+
+  // Publish line sensor data
+  publishLineSensors(left_sensor_state, right_sensor_state);
 
   // Besturing op basis van lijnsensor input
   if(right_sensor_state == LOW && left_sensor_state == HIGH) {
@@ -213,8 +247,14 @@ void loop() {
     driveForward(vSpeed);
     delay(100);
   }
+  else {
+    stopMotors();
+  }
+
   if(distance < stop_distance) {
+    publishStatus("Obstacle detected - starting avoidance maneuver");
     avoidObstacle();
+    publishStatus("Obstacle avoidance completed");
   }
 }
 
