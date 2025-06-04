@@ -37,6 +37,10 @@ int right_sensor_state;   // Status rechter lijnsensor
 long duration;            // Tijdsduur voor ultrasone sensor
 int distance;            // Gemeten afstand in cm
 
+// MQTT throttle
+unsigned long lastMqttSend = 0;
+const unsigned long mqttInterval = 500; // 500 ms
+
 // ===== MOTOR FUNCTIES =====
 void stopMotors() {
   analogWrite(motorRspeed, 0);
@@ -54,6 +58,7 @@ void driveForward(int speed) {
   analogWrite(motorLspeed, speed);
 
   publishMotorSpeeds(speed, vSpeed);
+  publishMovement("forward");
 }
 
 void turnRight(int speed) {
@@ -64,7 +69,8 @@ void turnRight(int speed) {
   analogWrite(motorRspeed, speed);
   analogWrite(motorLspeed, turn_speed);
 
-  publishMotorSpeeds(speed, vSpeed);
+  publishMotorSpeeds(speed, turn_speed);
+  publishMovement("turnRightSharp");
 }
 
 void turnLeft(int speed) {
@@ -75,74 +81,47 @@ void turnLeft(int speed) {
   analogWrite(motorRspeed, turn_speed);
   analogWrite(motorLspeed, speed);
 
-  publishMotorSpeeds(speed, vSpeed);
-}
-
-void turnRightSharp(int speed) {
-  digitalWrite(motorR1, LOW);
-  digitalWrite(motorR2, HIGH);                       
-  digitalWrite(motorL1, LOW);
-  digitalWrite(motorL2, HIGH);
-  analogWrite(motorRspeed, speed);
-  analogWrite(motorLspeed, speed);
-
-  publishMotorSpeeds(speed, vSpeed);
-}
-
-void turnLeftSharp(int speed) {
-  digitalWrite(motorR1, HIGH);
-  digitalWrite(motorR2, LOW);                       
-  digitalWrite(motorL1, HIGH);
-  digitalWrite(motorL2, LOW);
-  analogWrite(motorRspeed, speed);
-  analogWrite(motorLspeed, speed);
-
-  publishMotorSpeeds(speed, vSpeed);
+  publishMotorSpeeds(speed, turn_speed);
+  publishMovement("turnLeftSharp");
 }
 
 // ===== OBSTAKELVERMIJDING FUNCTIE =====
-void avoidObstacle() {
+void avoidObstacle(int distance) {
   Serial.println("Obstakel gedetecteerd! Start ontwijkmanoeuvre");
   Serial.print("Afstand tot obstakel: ");
   Serial.print(distance);
   Serial.println(" cm");
 
   // Ontwijkmanoeuvre naar links
-  Serial.println("Ontwijkmanoeuvre naar links");
-  turnLeftSharp(t_p_speed);
+  turnLeft(t_p_speed);
   delay(250);
   
   // Stop
+  publishMovement("stop");
   stopMotors();
   delay(500);
   
   // Draai
-  Serial.println("Draai naar links");
-  turnLeftSharp(t_p_speed);
+  turnLeft(t_p_speed);
   delay(900);
 
   // Rij vooruit
-  Serial.println("Rij vooruit");
   driveForward(t_p_speed);
   delay(800);
 
   // Draai terug
-  Serial.println("Draai terug rechts");
-  turnRightSharp(t_p_speed);
+  turnRight(t_p_speed);
   delay(900);
 
   // Rij vooruit
-  Serial.println("Rij vooruit");
   driveForward(t_p_speed);
   delay(700);
 
   // Draai
-  Serial.println("Draai rechts");
-  turnRightSharp(t_p_speed);
+  turnRight(t_p_speed);
   delay(650);
 
   // Rij vooruit
-  Serial.println("Rij vooruit");
   driveForward(t_p_speed);
 
   // Zoek naar lijn
@@ -155,11 +134,9 @@ void avoidObstacle() {
   }
 
   // Finale positionering
-  Serial.println("Finale positionering");
-  turnLeftSharp(t_p_speed);
+  turnLeft(t_p_speed);
   delay(100);
   
-  Serial.println("Rij vooruit");
   driveForward(t_p_speed);
   delay(500);
 }
@@ -214,13 +191,10 @@ void loop() {
     distance = 999; // Timeout waarde
   } else {
     distance = duration * 0.034 / 2;
+    if (distance < 1) {
+      distance = 999; // Ignore values below 1 cm
+    }
   }
-  Serial.print("Afstand: ");
-  Serial.print(distance);
-  Serial.println(" cm");
-
-  // Publish distance data
-  publishDistances(distance);  // Using same distance for left and right sensors
 
   // Lees lijnsensoren
   left_sensor_state = digitalRead(left_sensor_pin);
@@ -230,8 +204,13 @@ void loop() {
   Serial.print(" Rechts: ");
   Serial.println(right_sensor_state);
 
-  // Publish line sensor data
-  publishLineSensors(left_sensor_state, right_sensor_state);
+  // Only send MQTT messages every 500ms
+  if (millis() - lastMqttSend >= mqttInterval) {
+    lastMqttSend = millis();
+    publishDistances(distance);
+    publishLineSensors(left_sensor_state, right_sensor_state);
+    // Optionally: publishMotorSpeeds(...), publishStatus(...)
+  }
 
   // Besturing op basis van lijnsensor input
   if(right_sensor_state == LOW && left_sensor_state == HIGH) {
@@ -253,7 +232,7 @@ void loop() {
 
   if(distance < stop_distance) {
     publishStatus("Obstacle detected - starting avoidance maneuver");
-    avoidObstacle();
+    avoidObstacle(distance);
     publishStatus("Obstacle avoidance completed");
   }
 }

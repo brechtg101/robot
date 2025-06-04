@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MQTT Distance Graph</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/paho-mqtt/1.1.0/paho-mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 40px; background: #f9f9f9; }
+    #chart-container { width: 90vw; max-width: 900px; margin: auto; }
+    h2 { text-align: center; }
+    #status { text-align: center; margin-bottom: 20px; }
+  </style>
+</head>
+<body>
+  <h2>Live Distance Data from MQTT</h2>
+  <div id="status">Connecting to MQTT broker...</div>
+  <div id="chart-container">
+    <canvas id="distanceChart"></canvas>
+  </div>
+  <h2>Estimated Path Visualization</h2>
+  <div id="path-container" style="width:90vw;max-width:600px;margin:auto;background:#fff;border:1px solid #ccc;">
+    <canvas id="pathCanvas" width="600" height="600" style="background:#f4f4f4;"></canvas>
+  </div>
+  <script>
+    // MQTT settings
+    const broker = "wss://mqtt.eclipseprojects.io:443/mqtt";
+    const topic = "autobrecht/sensors/distances";
+    const clientID = "mqtt_graph_" + Math.random().toString(16).substr(2, 8);
+
+    // Chart.js setup
+    const ctx = document.getElementById('distanceChart').getContext('2d');
+    const chartData = {
+      labels: [],
+      datasets: [
+        {
+          label: 'Center Distance (cm)',
+          data: [],
+          borderColor: 'rgba(54, 162, 235, 1)',
+          backgroundColor: 'rgba(54, 162, 235, 0.2)',
+          fill: true,
+          tension: 0.2
+        }
+      ]
+    };
+    const distanceChart = new Chart(ctx, {
+      type: 'line',
+      data: chartData,
+      options: {
+        responsive: true,
+        scales: {
+          x: { title: { display: true, text: 'Time' } },
+          y: { title: { display: true, text: 'Distance (cm)' }, min: 0, max: 100 }
+        }
+      }
+    });
+
+    // MQTT client setup
+    const client = new Paho.Client(broker, clientID);
+
+    client.onConnectionLost = function(responseObject) {
+      document.getElementById('status').textContent = 'Connection lost. Reconnecting...';
+      setTimeout(() => client.connect({ onSuccess: onConnect }), 2000);
+    };
+
+    // --- PATH VISUALIZATION ---
+    // Path state
+    const pathCanvas = document.getElementById('pathCanvas');
+    const pathCtx = pathCanvas.getContext('2d');
+    let pos = { x: 300, y: 300 };
+    let heading = 0; // 0 = up, in radians
+    let pathPoints = [{ x: pos.x, y: pos.y }];
+    const step = 5; // pixels per forward move
+    const turnAngle = Math.PI / 12; // 15 degrees per turn
+
+    function drawPath() {
+      pathCtx.clearRect(0, 0, pathCanvas.width, pathCanvas.height);
+      // Draw path
+      pathCtx.beginPath();
+      pathCtx.moveTo(pathPoints[0].x, pathPoints[0].y);
+      for (let i = 1; i < pathPoints.length; i++) {
+        pathCtx.lineTo(pathPoints[i].x, pathPoints[i].y);
+      }
+      pathCtx.strokeStyle = '#1976d2';
+      pathCtx.lineWidth = 2;
+      pathCtx.stroke();
+      // Draw robot as a circle
+      pathCtx.beginPath();
+      pathCtx.arc(pos.x, pos.y, 6, 0, 2 * Math.PI);
+      pathCtx.fillStyle = '#e53935';
+      pathCtx.fill();
+    }
+
+    // Subscribe to line sensor topic
+    const lineTopic = "autobrecht/sensors/line";
+    const movementTopic = "autobrecht/movement";
+    client.onMessageArrived = function(message) {
+      try {
+        const data = JSON.parse(message.payloadString);
+        // Distance chart
+        if (message.destinationName === topic) {
+          const now = new Date().toLocaleTimeString();
+          chartData.labels.push(now);
+          chartData.datasets[0].data.push(data.center);
+          if (chartData.labels.length > 30) {
+            chartData.labels.shift();
+            chartData.datasets[0].data.shift();
+          }
+          distanceChart.update();
+        }
+        // Path estimation from line sensors
+        if (message.destinationName === lineTopic) {
+          // HIGH = 1, LOW = 0
+          const left = data.left;
+          const right = data.right;
+          if (left && right) {
+            // Move forward
+            pos.x += step * Math.sin(heading);
+            pos.y -= step * Math.cos(heading);
+          } else if (left && !right) {
+            // Turn left
+            heading -= turnAngle;
+            pos.x += step * Math.sin(heading);
+            pos.y -= step * Math.cos(heading);
+          } else if (!left && right) {
+            // Turn right
+            heading += turnAngle;
+            pos.x += step * Math.sin(heading);
+            pos.y -= step * Math.cos(heading);
+          } // else: stop, do not move
+          // Clamp to canvas
+          pos.x = Math.max(0, Math.min(pathCanvas.width, pos.x));
+          pos.y = Math.max(0, Math.min(pathCanvas.height, pos.y));
+          pathPoints.push({ x: pos.x, y: pos.y });
+          if (pathPoints.length > 500) pathPoints.shift();
+          drawPath();
+        }
+        // Path estimation from movement topic
+        if (message.destinationName === movementTopic) {
+          const move = message.payloadString;
+          if (move === "forward") {
+            pos.x += step * Math.sin(heading);
+            pos.y -= step * Math.cos(heading);
+          } else if (move === "turnLeftSharp") {
+            heading -= turnAngle;
+            pos.x += step * Math.sin(heading);
+            pos.y -= step * Math.cos(heading);
+          } else if (move === "turnRightSharp") {
+            heading += turnAngle;
+            pos.x += step * Math.sin(heading);
+            pos.y -= step * Math.cos(heading);
+          } else if (move === "stop") {
+            // Do nothing, just mark the stop
+          }
+          pos.x = Math.max(0, Math.min(pathCanvas.width, pos.x));
+          pos.y = Math.max(0, Math.min(pathCanvas.height, pos.y));
+          pathPoints.push({ x: pos.x, y: pos.y });
+          if (pathPoints.length > 500) pathPoints.shift();
+          drawPath();
+        }
+      } catch (e) {
+        console.error('Invalid message:', message.payloadString);
+      }
+    };
+
+    function onConnect() {
+      document.getElementById('status').textContent = 'Connected to MQTT broker!';
+      client.subscribe(topic);
+      client.subscribe(lineTopic);
+      client.subscribe(movementTopic);
+    }
+
+    client.connect({
+      onSuccess: onConnect,
+      useSSL: true
+    });
+  </script>
+</body>
+</html> 

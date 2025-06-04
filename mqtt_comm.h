@@ -139,6 +139,11 @@ void publishStatus(const char* status) {
     DEBUG_PRINTF("Published status: %s\n", status);
 }
 
+void publishMovement(const char* movement) {
+    if (!mqtt.connected()) return;
+    mqtt.publish("autobrecht/movement", movement);
+}
+
 void updateMqtt() {
     if (!mqtt.connected()) {
         unsigned long now = millis();
