@@ -10,7 +10,6 @@ int vSpeed = 100;         // Normale rijsnelheid
 int turn_speed = 200;    // Snelheid tijdens draaien (0-255)
 int t_p_speed = 100;      // Snelheid tijdens obstakelvermijding
 int stop_distance = 12;  // Afstand in cm waarop robot stopt voor obstakel
-int turn_delay = 10;     // Vertraging tijdens draaien
 
 // ===== PIN CONFIGURATIE =====
 // Ultrasone sensor (HC-SR04) aansluitingen
@@ -212,7 +211,7 @@ void loop() {
   else if(right_sensor_state == HIGH && left_sensor_state == HIGH) {
     Serial.println("Actie: Rijdt vooruit");
     driveForward(vSpeed);
-    delay(turn_delay);
+    delay(100);
   }
   if(distance < stop_distance) {
     avoidObstacle();
