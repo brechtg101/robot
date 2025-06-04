@@ -6,9 +6,9 @@
 
 // ===== CONFIGURATIE VARIABELEN =====
 // Snelheidsinstellingen voor de motoren
-int vSpeed = 80;         // Normale rijsnelheid
-int turn_speed = 160;    // Snelheid tijdens draaien (0-255)
-int t_p_speed = 80;      // Snelheid tijdens obstakelvermijding
+int vSpeed = 100;         // Normale rijsnelheid
+int turn_speed = 200;    // Snelheid tijdens draaien (0-255)
+int t_p_speed = 100;      // Snelheid tijdens obstakelvermijding
 int stop_distance = 12;  // Afstand in cm waarop robot stopt voor obstakel
 int turn_delay = 10;     // Vertraging tijdens draaien
 
