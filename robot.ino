@@ -8,10 +8,14 @@
 
 // ===== CONFIGURATIE VARIABELEN =====
 // Snelheidsinstellingen voor de motoren
-int vSpeed = 100;         // Normale rijsnelheid
+int vSpeed = 80;         // Normale rijsnelheid
 int turn_speed = 200;    // Snelheid tijdens draaien (0-255)
 int t_p_speed = 100;      // Snelheid tijdens obstakelvermijding
 int stop_distance = 12;  // Afstand in cm waarop robot stopt voor obstakel
+
+// IR Sensor thresholds
+int IR_THRESHOLD_LEFT = 500;   // Threshold waarde voor linker IR sensor (0-4095)
+int IR_THRESHOLD_RIGHT = 500;  // Threshold waarde voor rechter IR sensor (0-4095)
 
 // ===== PIN CONFIGURATIE =====
 // Ultrasone sensor (HC-SR04) aansluitingen
@@ -19,21 +23,23 @@ const int trigPin = 25;  // Trigger pin
 const int echoPin = 26;  // Echo pin
 
 // Motor driver (L293) aansluitingen
-const int motorR1 = 22;      // Rechter motor richting pin 1
-const int motorR2 = 23;      // Rechter motor richting pin 2
+const int motorR1 = 18;      // Rechter motor richting pin 1
+const int motorR2 = 19;      // Rechter motor richting pin 2
 const int motorRspeed = 15;  // Rechter motor snelheid pin
-const int motorL1 = 2;       // Linker motor richting pin 1
-const int motorL2 = 14;      // Linker motor richting pin 2
-const int motorLspeed = 16;  // Linker motor snelheid pin
+const int motorL1 = 21;       // Linker motor richting pin 1
+const int motorL2 = 5;      // Linker motor richting pin 2
+const int motorLspeed = 4;  // Linker motor snelheid pin
 
 // Lijnsensor aansluitingen
-const int left_sensor_pin = 33;   // Linker lijnsensor
-const int right_sensor_pin = 35;  // Rechter lijnsensor
+const int left_sensor_pin = 33;   // Linker IR sensor (analog)
+const int right_sensor_pin = 35;  // Rechter IR sensor (analog)
 
 // ===== GLOBALE VARIABELEN =====
 int turnspeed;            // Variabele voor draaisnelheid
-int left_sensor_state;    // Status linker lijnsensor
-int right_sensor_state;   // Status rechter lijnsensor
+int left_sensor_value;    // Analoge waarde linker IR sensor
+int right_sensor_value;   // Analoge waarde rechter IR sensor
+bool left_sensor_state;   // Status linker IR sensor (true = lijn gedetecteerd)
+bool right_sensor_state;  // Status rechter IR sensor (true = lijn gedetecteerd)
 long duration;            // Tijdsduur voor ultrasone sensor
 int distance;            // Gemeten afstand in cm
 
@@ -70,7 +76,7 @@ void turnRight(int speed) {
   analogWrite(motorLspeed, turn_speed);
 
   publishMotorSpeeds(speed, turn_speed);
-  publishMovement("turnRightSharp");
+  publishMovement("turnRight");
 }
 
 void turnLeft(int speed) {
@@ -82,7 +88,7 @@ void turnLeft(int speed) {
   analogWrite(motorLspeed, speed);
 
   publishMotorSpeeds(speed, turn_speed);
-  publishMovement("turnLeftSharp");
+  publishMovement("turnLeft");
 }
 
 // ===== OBSTAKELVERMIJDING FUNCTIE =====
@@ -138,7 +144,6 @@ void avoidObstacle(int distance) {
   delay(100);
   
   driveForward(t_p_speed);
-  delay(500);
 }
 
 void setup() {
@@ -196,35 +201,39 @@ void loop() {
     }
   }
 
-  // Lees lijnsensoren
-  left_sensor_state = digitalRead(left_sensor_pin);
-  right_sensor_state = digitalRead(right_sensor_pin);
-  Serial.print("Lijnsensoren - Links: ");
-  Serial.print(left_sensor_state);
-  Serial.print(" Rechts: ");
-  Serial.println(right_sensor_state);
+  // Lees IR sensoren (analog)
+  left_sensor_value = analogRead(left_sensor_pin);
+  right_sensor_value = analogRead(right_sensor_pin);
+  
+  // Bepaal sensor status op basis van threshold
+  left_sensor_state = (left_sensor_value > IR_THRESHOLD_LEFT);
+  right_sensor_state = (right_sensor_value > IR_THRESHOLD_RIGHT);
 
-  // Only send MQTT messages every 500ms
-  if (millis() - lastMqttSend >= mqttInterval) {
-    lastMqttSend = millis();
-    publishDistances(distance);
-    publishLineSensors(left_sensor_state, right_sensor_state);
-    // Optionally: publishMotorSpeeds(...), publishStatus(...)
-  }
+  Serial.print("IR Sensoren - Links: ");
+  Serial.print(left_sensor_value);
+  Serial.print(" (");
+  Serial.print(left_sensor_state ? "LIJN" : "GEEN LIJN");
+  Serial.print(") Rechts: ");
+  Serial.print(right_sensor_value);
+  Serial.print(" (");
+  Serial.print(right_sensor_state ? "LIJN" : "GEEN LIJN");
+  Serial.println(")");
 
-  // Besturing op basis van lijnsensor input
-  if(right_sensor_state == LOW && left_sensor_state == HIGH) {
+  publishDistances(distance);
+  publishLineSensors(left_sensor_state, right_sensor_state);
+
+  // Besturing op basis van IR sensor input
+  if(right_sensor_state == false && left_sensor_state == true) {
     Serial.println("Actie: Draait naar rechts");
     turnRight(vSpeed);
   }
-  else if(right_sensor_state == HIGH && left_sensor_state == LOW) {
+  else if(right_sensor_state == true && left_sensor_state == false) {
     Serial.println("Actie: Draait naar links");
     turnLeft(vSpeed);
   }
-  else if(right_sensor_state == HIGH && left_sensor_state == HIGH) {
+  else if(right_sensor_state == true && left_sensor_state == true) {
     Serial.println("Actie: Rijdt vooruit");
     driveForward(vSpeed);
-    delay(100);
   }
   else {
     stopMotors();

@@ -29,6 +29,7 @@ const char* TOPIC_DISTANCES = "autobrecht/sensors/distances";
 const char* TOPIC_LINE_SENSORS = "autobrecht/sensors/line";
 const char* TOPIC_MOTOR_SPEEDS = "autobrecht/motors/speeds";
 const char* TOPIC_STATUS = "autobrecht/status";
+const char* TOPIC_MOVEMENT = "autobrecht/movement";
 
 // Global variables
 WiFiClient espClient;
@@ -135,13 +136,23 @@ void publishMotorSpeeds(int left, int right) {
 
 void publishStatus(const char* status) {
     if (!mqtt.connected()) return;
-    mqtt.publish(TOPIC_STATUS, status);
+
+    char message[100];
+    snprintf(message, sizeof(message), 
+             "{\"status\":%.1f}", 
+             status);
+    mqtt.publish(TOPIC_STATUS, message);
     DEBUG_PRINTF("Published status: %s\n", status);
 }
 
 void publishMovement(const char* movement) {
     if (!mqtt.connected()) return;
-    mqtt.publish("autobrecht/movement", movement);
+
+    char message[100];
+    snprintf(message, sizeof(message), 
+             "{\"movement\":%.1f}", 
+             movement);
+    mqtt.publish(TOPIC_MOVEMENT, message);
 }
 
 void updateMqtt() {
